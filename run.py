@@ -1,30 +1,36 @@
+'''
+QRT 2021 data challenge. 
+author: Adhish Aggarwal
+'''
+
 import pandas as pd
 import numpy as np
 import datetime as dt
 
-from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.cross_decomposition import PLSRegression, PLSCanonical
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import LinearRegression
 
 from tqdm import tqdm
 import copy
 
+# NUMBER OF CORRELATED FEATURES TO USE. 
+N_FEAT = 30
+
+# READING TRAINING AND TESTING DATA
 X_train = pd.read_csv("X_train_itDkypA.csv").set_index("ID")
 Y_train = pd.read_csv("y_train_3LeeT2g.csv").set_index("ID")
 X_test = pd.read_csv("X_test_Beg4ey3.csv").set_index("ID")
 
+# FILLING NAN's IN TRAINING DATA (X_train) USING LINEAR REGRESSION
 corr_df = X_train.drop(["ID_DAY", "ID_TARGET"], axis=1).corr()
-
 nan_dict = {}
 for col in corr_df.columns:
 
     corr_factors = corr_df.loc[col].drop(col).sort_values()
-    cols = corr_factors.iloc[-30:].index.tolist()
+    cols = corr_factors.iloc[-N_FEAT:].index.tolist()
 
     data_x = X_train[cols]
-
     x_test = X_train[X_train[col].isnull()].drop([col], axis=1)
 
     x_train = X_train[~X_train[col].isnull()].drop([col], axis=1)
@@ -41,13 +47,12 @@ for col in corr_df.columns:
     pred_values = model.predict(x_test)
     nan_dict[col] = (x_test.index.tolist(), pred_values)
 
-##
+## REPLACING NAN's WITH PREDICTED VALUES.
 for key, items in nan_dict.items():
     X_train.loc[items[0], key] = items[1]
 
 ### SPLITTING INTO TRAIN AND VALID
 train_valid_dict = {}
-
 for id_ in X_train.ID_TARGET.unique():
     train_valid_dict[id_] = {}
 
@@ -56,13 +61,12 @@ for id_ in X_train.ID_TARGET.unique():
 
     id_df_x = id_df_x.drop(["ID_DAY", "ID_TARGET"], axis=1)
 
-    ### SCALING
+    ### SPLITTING USING "train_test_split"
     X_train_id, X_valid_id, y_train_id, y_valid_id = train_test_split(id_df_x, id_df_y, test_size=0.2, random_state=2)
 
-    ## TOP 30 FEATURES CORR WISE
+    ## TOP "N_FEAT" FEATURES CORR WISE
     corr_df = pd.concat([X_train_id, y_train_id], axis=1).corr().loc["RET_TARGET"].drop(["RET_TARGET"])
-    features = corr_df.abs().sort_values().iloc[-30:].index.tolist()
-#     features = corr_df.abs().sort_values().iloc[:30].index.tolist()
+    features = corr_df.abs().sort_values().iloc[-N_FEAT:].index.tolist()
 
     X_train_id = X_train_id[features]
     X_valid_id = X_valid_id[features]
@@ -80,16 +84,12 @@ def weighted_accuracy_normal(y_test, y_pred):
     return score
 
 max_ = {}
-# import ipdb; ipdb.set_trace()
 for key in tqdm(train_valid_dict):
-#     print(key)
     X_train_id, Y_train_id = train_valid_dict[key]["train"]
     X_valid_id, Y_valid_id = train_valid_dict[key]["valid"]
     max_[key] = {"valid": [0, 0, 0, None]}
 
-    for i in range(2,4): #X_train_id.shape[1]
-#         print(i)
-
+    for i in range(2,4):
         pls2 = PLSRegression(n_components=i)
         pls2.fit(X_train_id, Y_train_id)
 
@@ -134,6 +134,4 @@ for i in tqdm(range(len(X_test))):
 
 ##
 df_sub = pd.DataFrame(submission_dict).set_index("ID")
-df_sub.head()
-
 df_sub.to_csv("submission.csv")

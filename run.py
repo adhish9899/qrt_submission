@@ -11,6 +11,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import LinearRegression
 
+from utils import weighted_accuracy
+
 from tqdm import tqdm
 import copy
 
@@ -64,7 +66,7 @@ for id_ in X_train.ID_TARGET.unique():
     ### SPLITTING USING "train_test_split"
     X_train_id, X_valid_id, y_train_id, y_valid_id = train_test_split(id_df_x, id_df_y, test_size=0.2, random_state=2)
 
-    ## TOP "N_FEAT" FEATURES CORR WISE
+    ## TOP "N_FEAT" CORRELATED FEATURES WITH "ID_TARGET" IN TRAINING DATA
     corr_df = pd.concat([X_train_id, y_train_id], axis=1).corr().loc["RET_TARGET"].drop(["RET_TARGET"])
     features = corr_df.abs().sort_values().iloc[-N_FEAT:].index.tolist()
 
@@ -75,20 +77,14 @@ for id_ in X_train.ID_TARGET.unique():
     train_valid_dict[id_]["valid"] = (X_valid_id, y_valid_id)
     train_valid_dict[id_]["features"] = features
 
-print(list(train_valid_dict.keys())[:5])
-
-def weighted_accuracy_normal(y_test, y_pred):
-    y_abs = np.abs(y_test)
-    norm = y_abs.sum()
-    score = ((np.sign(y_pred) == np.sign(y_test)) * y_abs).sum() / norm
-    return score
-
+## USING PLS (PARTIAL LEAST SQUARE) REGRESSION TO PREDICT. 
 max_ = {}
 for key in tqdm(train_valid_dict):
     X_train_id, Y_train_id = train_valid_dict[key]["train"]
     X_valid_id, Y_valid_id = train_valid_dict[key]["valid"]
     max_[key] = {"valid": [0, 0, 0, None]}
 
+    ## USING 2-3 COMPONENTS TO REDUCE OVERFITTING. 
     for i in range(2,4):
         pls2 = PLSRegression(n_components=i)
         pls2.fit(X_train_id, Y_train_id)
@@ -103,28 +99,23 @@ for key in tqdm(train_valid_dict):
         train_actual = Y_train_id.values.reshape(-1,)
         valid_actual = Y_valid_id.values.reshape(-1,)
 
-        train_acc = round(weighted_accuracy_normal(train_actual, train_pred_array),3)
-        valid_acc = round(weighted_accuracy_normal(valid_actual, valid_pred_array),3)
+        train_acc = round(weighted_accuracy(train_actual, train_pred_array),3)
+        valid_acc = round(weighted_accuracy(valid_actual, valid_pred_array),3)
 
         if valid_acc > max_[key]["valid"][0]:
             max_[key]["valid"][0] = valid_acc
             max_[key]["valid"][1] = i
             max_[key]["valid"][2] = train_acc
-            max_[key]["valid"][3] = copy.deepcopy(pls2)
+            max_[key]["valid"][3] = copy.deepcopy(pls2) # SAVING THE MODEL WITH BEST VALID ACCURACY
 
 
-print("VALID", np.mean([max_[x]["valid"][0] for x in max_.keys()]))
-print("TRAIN", np.mean([max_[x]["valid"][2] for x in max_.keys()]))
 
-
-####
+# FINAL SUBMISSION. PREDICTING ON TEST DATA 
 submission_dict = {"ID": [], "RET_TARGET": []}
-
 for i in tqdm(range(len(X_test))):
     id_target = int(X_test.iloc[i]["ID_TARGET"])
     test_row = X_test.iloc[i].fillna(0).drop(["ID_DAY", "ID_TARGET"])
     test_row = test_row.loc[train_valid_dict[id_target]["features"]]
-
 
     predicton = max_[id_target]["valid"][3].predict(test_row.values.reshape(1,-1))[0,0]
     id_ = X_test.index[i]

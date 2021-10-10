@@ -20,9 +20,9 @@ import copy
 N_FEAT = 30
 
 # READING TRAINING AND TESTING DATA
-X_train = pd.read_csv("X_train_itDkypA.csv").set_index("ID")
-Y_train = pd.read_csv("y_train_3LeeT2g.csv").set_index("ID")
-X_test = pd.read_csv("X_test_Beg4ey3.csv").set_index("ID")
+X_train = pd.read_csv("X_train.csv").set_index("ID")
+Y_train = pd.read_csv("y_train.csv").set_index("ID")
+X_test = pd.read_csv("X_test.csv").set_index("ID")
 
 # FILLING NAN's IN TRAINING DATA (X_train) USING LINEAR REGRESSION
 corr_df = X_train.drop(["ID_DAY", "ID_TARGET"], axis=1).corr()
